@@ -4,9 +4,9 @@
 define([
     "underscore",
     "backbone",
-    "nbextensions/widgets/widgets/js/utils",
+    "./utils",
     "services/kernels/comm",
-    "nbextensions/widgets/widgets/js/manager-base"
+    "./manager-base"
 ], function (_, Backbone, utils, comm, managerBase) {
     "use strict";
     
@@ -17,7 +17,7 @@ define([
         managerBase.ManagerBase.apply(this);
         WidgetManager._managers.push(this);
 
-        // Attach a comm manager to the
+        // Attach a comm manager
         this.notebook = notebook;
         this.keyboard_manager = notebook.keyboard_manager;
         this.comm_manager = comm_manager;
@@ -266,30 +266,13 @@ define([
 
     WidgetManager.prototype._get_comm_info = function() {
         /**
-         * Gets a promise for the open comms in the backend
+         * Gets a promise for the valid widget models.
          */
-
-        // Version using the comm_list_[request/reply] shell message.
-        /*var that = this;
-        return new Promise(function(resolve, reject) {
-             kernel.comm_info(function(msg) {
-                 resolve(msg['content']['comms']);
-             });
-        });*/
-
-        // Workaround for absence of comm_list_[request/reply] shell message.
-        // Create a new widget that gives the comm list and commits suicide.
         var that = this;
         return this._get_connected_kernel().then(function(kernel) {
             return new Promise(function(resolve, reject) {
-                var comm = kernel.comm_manager.new_comm('ipython.widget',
-                                    {'widget_class': 'ipywidgets.CommInfo'},
-                                    'comm_info');
-                comm.on_msg(function(msg) {
-                    var data = msg.content.data;
-                    if (data.content && data.method === 'custom') {
-                        resolve(data.content.comms);
-                    }
+                kernel.comm_info('ipython.widget', function(msg) {
+                    resolve(msg['content']['comms']);
                 });
             });
         });

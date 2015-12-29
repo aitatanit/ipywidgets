@@ -5,8 +5,8 @@
 if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
 
 define([
-    "nbextensions/widgets/widgets/js/widget",
-    "nbextensions/widgets/widgets/js/utils",
+    "./widget",
+    "./utils",
     "jquery",
     "underscore"
 ], function(widget, utils, $, _) {
@@ -90,7 +90,7 @@ define([
 
     });
 
-    var Controller = widget.WidgetModel.extend({
+    var Controller = widget.DOMWidgetModel.extend({
         /* The Controller model. */
 
         initialize: function() {
@@ -243,7 +243,7 @@ define([
         serializers: _.extend({
             buttons: {deserialize: widget.unpack_models},
             axes: {deserialize: widget.unpack_models},
-        }, widget.WidgetModel.prototype.serializers)
+        }, widget.DOMWidgetModel.prototype.serializers)
 
     });
 

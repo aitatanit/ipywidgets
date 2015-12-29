@@ -5,9 +5,9 @@
 if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
 
 define([
-    "nbextensions/widgets/widgets/js/widget",
-    "nbextensions/widgets/widgets/js/utils",
-    "jqueryui",
+    "./widget",
+    "./utils",
+    "jquery",
     "underscore",
     "bootstrap",
 ], function(widget, utils, $, _) {

@@ -5,12 +5,13 @@
 if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
 
 define([
-    "nbextensions/widgets/widgets/js/widget",
+    "./widget",
     "underscore",
-    "jqueryui",
-    "bootstrap"
+    "jquery",
+    "bootstrap",
+    "jquery-ui"
 ], function(widget, _, $) {
-    
+
     var IntSliderView = widget.DOMWidgetView.extend({
         render : function() {
             /**

@@ -12,6 +12,7 @@ function requireLocalFiles() {
     require('./widget');
     require('./widget_int');
     require('./manager-base');
+    require('../css/widgets.min.css');
 }
 
 module.exports = function createDefine(targetModule) {
@@ -21,8 +22,7 @@ module.exports = function createDefine(targetModule) {
         var args = Array.prototype.slice.call(arguments);
         if (args.length > 1) {
             args[0] = args[0].map(function(arg) {
-                if (arg === 'jqueryui') arg = 'jquery';
-                arg = arg.replace('nbextensions/widgets/widgets/js/', './');
+                arg = arg.replace('nbextensions/widgets/components/require-css/css!', '');
                 return arg;
             });
         }

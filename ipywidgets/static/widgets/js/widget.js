@@ -4,11 +4,12 @@
 // npm compatibility
 if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
 
-define(["nbextensions/widgets/widgets/js/utils",
-        "nbextensions/widgets/widgets/js/manager-base",
+define(["./utils",
+        "./manager-base",
         "underscore",
         "backbone",
-        "jquery"
+        "jquery",
+        "nbextensions/widgets/components/require-css/css!../css/widgets.min.css"
 ], function(utils, managerBase, _, Backbone, $) {
     "use strict";
     
@@ -51,7 +52,6 @@ define(["nbextensions/widgets/widgets/js/utils",
              *      An ID unique to this model.
              * comm : Comm instance (optional)
              */
-            WidgetModel.__super__.constructor.apply(this);
             this.widget_manager = widget_manager;
             this.state_change = Promise.resolve();
             this._buffered_state_diff = {};
@@ -98,6 +98,7 @@ define(["nbextensions/widgets/widgets/js/utils",
                 widget_manager.notebook.events.on('kernel_restarting.Kernel', died);
                 widget_manager.notebook.events.on('kernel_dead.Kernel', died);
             }
+            WidgetModel.__super__.constructor.apply(this);
         },
 
         send: function (content, callbacks, buffers) {
@@ -151,8 +152,10 @@ define(["nbextensions/widgets/widgets/js/utils",
             }
             this.stopListening();
             this.trigger('destroy', this);
-            delete this.comm.model; // Delete ref so GC will collect widget model.
-            delete this.comm;
+            if (this.comm) {
+                delete this.comm.model; // Delete ref so GC will collect widget model.
+                delete this.comm;
+            }
             delete this.model_id; // Delete id from model so widget manager cleans up.
             _.each(this.views, function(v, id, views) {
                 v.then(function(view) {
@@ -163,7 +166,7 @@ define(["nbextensions/widgets/widgets/js/utils",
         },
 
         _handle_comm_closed: function (msg) {
-            /** 
+            /**
              * Handle when a widget is closed.
              */
             this.trigger('comm:close');
@@ -213,10 +216,12 @@ define(["nbextensions/widgets/widgets/js/utils",
                             that.set_state(state);
                         }).catch(utils.reject("Couldn't process update msg for model id '" + String(that.id) + "'", true))
                         .then(function() {
-                            var parent_id = msg.parent_header.msg_id;
-                            if (that._resolve_received_state[parent_id] !== undefined) {
-                                that._resolve_received_state[parent_id](that);
-                                delete that._resolve_received_state[parent_id];
+                            if (msg.parent_header) {
+                                var parent_id = msg.parent_header.msg_id;
+                                if (that._resolve_received_state[parent_id] !== undefined) {
+                                    that._resolve_received_state[parent_id](that);
+                                    delete that._resolve_received_state[parent_id];
+                                }
                             }
                         }).catch(utils.reject("Couldn't resolve state request promise", true));
                     return this.state_change;
@@ -450,12 +455,11 @@ define(["nbextensions/widgets/widgets/js/utils",
              * the second form will result in foo being called twice
              * while the first will call foo only once.
              */
-            this.on('change', function() {
+            this.on("change", function() {
                 if (keys.some(this.hasChanged, this)) {
                     callback.apply(context, arguments);
                 }
             }, this);
-
         },
 
         toJSON: function(options) {
@@ -466,7 +470,7 @@ define(["nbextensions/widgets/widgets/js/utils",
             return "IPY_MODEL_" + this.id;
         }
     });
-    
+
 
     var WidgetViewMixin = {
         initialize: function(parameters) {
@@ -558,6 +562,22 @@ define(["nbextensions/widgets/widgets/js/utils",
              * Public constructor
              */
             WidgetViewMixin.initialize.apply(this, [parameters]);
+            this.id = utils.uuid();
+            
+            // Create and apply a unique style class name that can be used to
+            // style this view directly.
+            this.styleClassName = 'widget' + '-' + this.model.id + '-' + this.id;
+            this.el.classList.add(this.styleClassName);
+
+            // Find or create a style tag for this widget view
+            this.styleNode = document.querySelectorAll('style.' + this.styleClassName);
+            if (this.styleNode && this.styleNode.length > 0) {
+                this.styleNode = this.styleNode[0];
+            } else {
+                this.styleNode = this.model.widget_manager.createStyleTag();
+                this.styleNode.className = this.styleClassName;
+            }
+            
             this.listenTo(this.model, 'change:visible', this.update_visible, this);
             this.listenTo(this.model, 'change:_css', this.update_css, this);
 
@@ -637,6 +657,17 @@ define(["nbextensions/widgets/widgets/js/utils",
                 this.setStyle(this.model.get('style'));
             }, this));
         },
+
+        remove: function () {
+            // Raise a remove event when the view is removed.
+            WidgetViewMixin.remove.apply(this, arguments);
+            
+            // Remove the style tag from the DOM so the GC can collect it
+            if (this.styleNode) {                
+                this.styleNode.remove();
+                delete this.styleNode;
+            }
+        },
         
         setStyle: function(style, oldStyle) {
             var that = this;
@@ -700,19 +731,41 @@ define(["nbextensions/widgets/widgets/js/utils",
             /**
              * Update the css styling of this view.
              */
-            if (css === undefined) {return;}
-            for (var i = 0; i < css.length; i++) {
-                // Apply the css traits to all elements that match the selector.
-                var selector = css[i][0];
-                var parent = this.el.parentElement;
-                var elements = parent.querySelectorAll(selector) || [this.el];
-                if (elements.length > 0) {
-                    var trait_key = css[i][1];
-                    var trait_value = css[i][2];
-                    _.each(elements, function(e) {
-                        e.style[trait_key] = trait_value;
-                    });
+            
+            // Convert the list of tuples into individual strings, which together
+            // form the complete CSS to apply to the view.
+            var styleStrings = [];
+            css.forEach(function(tuple) {
+                var selector = String(tuple[0]).trim();
+                var key = String(tuple[1]);
+                var value = String(tuple[2]);
+                
+                // If the selector starts with an ampersand, remove the ampersand
+                // and concatenate the selector to the styleClassName.
+                if (selector.length > 0 && selector[0] === ':') {
+                    selector = '.' + this.styleClassName + selector;
+                } else {
+                    selector = '.' + this.styleClassName + ' ' + selector;
                 }
+                
+                styleStrings.push(selector + ' { ' + key + ': ' + value + '; }');
+            }, this);
+            
+            // Set the style string on the style element.
+            var styleString = styleStrings.join('\n');
+            if (this.styleNode.styleSheet) {
+                
+                // Change styling
+                this.styleNode.styleSheet.cssText = styleString;
+            } else {
+                
+                // Remove existing styling
+                while (this.styleNode.firstChild) {
+                    this.styleNode.removeChild(this.styleNode.firstChild);
+                }
+                
+                // Add new styling
+                this.styleNode.appendChild(document.createTextNode(styleString));
             }
         },
 
