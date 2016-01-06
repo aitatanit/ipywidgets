@@ -17,19 +17,19 @@ define([
              */
             this.$el
                 .addClass('ipy-widget widget-hbox widget-checkbox');
-            this.$label = $('<div />')
-                .addClass('widget-label')
-                .appendTo(this.$el)
-                .hide();
             this.$checkbox = $('<input />')
                 .attr('type', 'checkbox')
                 .appendTo(this.$el)
                 .click($.proxy(this.handle_click, this));
+            this.$label = $('<div />')
+                .addClass('widget-label')
+                .appendTo(this.$el)
+                .hide();
 
             this.update(); // Set defaults.
         },
 
-        update_attr: function(name, value) {
+        update_attr: function(name, value) { // TODO: Deprecated in 5.0
             /**
              * Set a css attr of the widget view.
              */

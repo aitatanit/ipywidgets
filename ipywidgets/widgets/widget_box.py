@@ -9,6 +9,7 @@ Represents a container that can be used to group other widgets.
 from .domwidget import DOMWidget
 from .widget import Widget, register, widget_serialization
 from traitlets import Unicode, Tuple, Int, CaselessStrEnum, Instance
+from warnings import warn
 
 
 @register('IPython.Box')
@@ -74,8 +75,23 @@ class PlaceProxy(Proxy):
     selector = Unicode(sync=True)
 
 
+def VBox(*pargs, **kwargs):
+    """Displays multiple widgets vertically using the flexible box model."""
+    box = Box(*pargs, **kwargs)
+    box.layout.display = 'flex'
+    box.layout.flex_flow = 'column'
+    return box
+
+
+def HBox(*pargs, **kwargs):
+    """Displays multiple widgets horizontally using the flexible box model."""
+    box = Box(*pargs, **kwargs)
+    box.layout.display = 'flex'
+    return box
+
+
 @register('IPython.FlexBox')
-class FlexBox(Box):
+class FlexBox(Box): # TODO: Deprecated in 5.0 (entire class)
     """Displays multiple widgets using the flexible box model."""
     _view_name = Unicode('FlexBoxView', sync=True)
     orientation = CaselessStrEnum(values=['vertical', 'horizontal'], default_value='vertical', sync=True)
@@ -93,14 +109,7 @@ class FlexBox(Box):
         values=_locations,
         default_value='start', sync=True)
 
+    def __init__(self, *pargs, **kwargs):
+        warn('FlexBox is deprecated in ipywidgets 5.0.  Use Box and Box.layout instead.', DeprecationWarning)
+        super(FlexBox, self).__init__(*pargs, **kwargs)
 
-def VBox(*pargs, **kwargs):
-    """Displays multiple widgets vertically using the flexible box model."""
-    kwargs['orientation'] = 'vertical'
-    return FlexBox(*pargs, **kwargs)
-
-
-def HBox(*pargs, **kwargs):
-    """Displays multiple widgets horizontally using the flexible box model."""
-    kwargs['orientation'] = 'horizontal'
-    return FlexBox(*pargs, **kwargs)
