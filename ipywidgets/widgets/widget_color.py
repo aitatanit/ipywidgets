@@ -12,10 +12,11 @@ from .trait_types import Color
 from traitlets import Unicode, Bool
 
 
-@register('IPython.ColorPicker')
+@register('Jupyter.ColorPicker')
 class ColorPicker(DOMWidget):
-    value = Color('black', sync=True)
-    short = Bool(sync=True)
-    description = Unicode(sync=True)
-    
-    _view_name = Unicode('ColorPicker', sync=True)
+    value = Color('black').tag(sync=True)
+    concise = Bool().tag(sync=True)
+    description = Unicode().tag(sync=True)
+
+    _view_name = Unicode('ColorPickerView').tag(sync=True)
+    _model_name = Unicode('ColorPickerModel').tag(sync=True)

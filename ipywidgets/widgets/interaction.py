@@ -12,14 +12,20 @@ except ImportError:
     from IPython.utils.signatures import signature, Parameter
 from inspect import getcallargs
 
+try:
+    from inspect import getfullargspec as check_argspec
+except ImportError:
+    from inspect import getargspec as check_argspec # py2
+
 from IPython.core.getipython import get_ipython
 from . import (Widget, Text,
     FloatSlider, IntSlider, Checkbox, Dropdown,
     Box, Button, DOMWidget)
 from IPython.display import display, clear_output
 from ipython_genutils.py3compat import string_types, unicode_type
-from traitlets import HasTraits, Any, Unicode
+from traitlets import HasTraits, Any, Unicode, observe
 from numbers import Real, Integral
+from warnings import warn
 
 empty = Parameter.empty
 
@@ -79,10 +85,26 @@ def _widget_abbrev_single_value(o):
 
 def _widget_abbrev(o):
     """Make widgets from abbreviations: single values, lists or tuples."""
-    if isinstance(o, (list, tuple)):
-        if o and all(isinstance(x, string_types) for x in o):
+    if isinstance(o, list):
+        # --------------------------------------------------------------------
+        # Handle deprecated behavior of using lists of length 2 or 3 in place
+        # of tuples to specify slider widget attributes. This will be removed
+        # in ipywidgets 6.0.
+        if len(o) in [2, 3] and all(isinstance(x, Real) for x in o):
+            warn("For Sliders, use a tuple: %s" % (tuple(o),), DeprecationWarning)
+            return _widget_abbrev(tuple(o))
+        # --------------------------------------------------------------------
+        return Dropdown(options=[unicode_type(k) for k in o])
+
+    elif isinstance(o, tuple):
+        # --------------------------------------------------------------------
+        # Handle deprecated behavior of using tuples for selection widget. This
+        # will be removed in ipywidgets 6.0.
+        if any(not isinstance(x, Real) for x in o):
+            warn("For Selection widgets, use a list %s" %(list(o),), DeprecationWarning)
             return Dropdown(options=[unicode_type(k) for k in o])
-        elif _matches(o, (Real, Real)):
+        # --------------------------------------------------------------------
+        if _matches(o, (Real, Real)):
             min, max, value = _get_min_max_value(o[0], o[1])
             if all(isinstance(_, Integral) for _ in o):
                 cls = IntSlider
@@ -99,6 +121,7 @@ def _widget_abbrev(o):
             else:
                 cls = FloatSlider
             return cls(value=value, min=min, max=max, step=step)
+
     else:
         return _widget_abbrev_single_value(o)
 
@@ -146,7 +169,13 @@ def _yield_abbreviations_for_parameter(param, kwargs):
 def _find_abbreviations(f, kwargs):
     """Find the abbreviations for a function and kwargs passed to interact."""
     new_kwargs = []
-    for param in signature(f).parameters.values():
+    try:
+        sig = signature(f)
+    except (ValueError, TypeError):
+        # can't inspect, no info from function; only use kwargs
+        return [ (key, value, value) for key, value in kwargs.items() ]
+
+    for param in sig.parameters.values():
         for name, value, default in _yield_abbreviations_for_parameter(param, kwargs):
             if value is empty:
                 raise ValueError('cannot find widget or abbreviation for argument: {!r}'.format(name))
@@ -196,7 +225,13 @@ def interactive(__interact_f, **kwargs):
     # Before we proceed, let's make sure that the user has passed a set of args+kwargs
     # that will lead to a valid call of the function. This protects against unspecified
     # and doubly-specified arguments.
-    getcallargs(f, **{n:v for n,v,_ in new_kwargs})
+    try:
+        check_argspec(f)
+    except TypeError:
+        # if we can't inspect, we can't validate
+        pass
+    else:
+        getcallargs(f, **{n:v for n,v,_ in new_kwargs})
     # Now build the widgets from the abbreviations.
     kwargs_widgets.extend(_widgets_from_abbreviations(new_kwargs))
 
@@ -212,7 +247,8 @@ def interactive(__interact_f, **kwargs):
     container.children = c
 
     # Build the callback
-    def call_f(name=None, old=None, new=None):
+    def call_f(change):
+        name, old, new = change['name'], change['old'], change['new']
         container.kwargs = {}
         for widget in kwargs_widgets:
             value = widget.value
@@ -249,9 +285,9 @@ def interactive(__interact_f, **kwargs):
                 w.on_submit(call_f)
     else:
         for widget in kwargs_widgets:
-            widget.on_trait_change(call_f, 'value')
+            widget.observe(call_f, names='value')
 
-        container.on_displayed(lambda _: call_f(None, None, None))
+        container.on_displayed(lambda _: call_f(dict(name=None, old=None, new=None)))
 
     return container
 

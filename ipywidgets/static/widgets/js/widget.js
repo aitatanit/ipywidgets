@@ -1,15 +1,11 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-// npm compatibility
-if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
-
 define(["./utils",
         "./manager-base",
         "underscore",
         "backbone",
-        "jquery",
-        "nbextensions/widgets/components/require-css/css!../css/widgets.min.css"
+        "jquery"
 ], function(utils, managerBase, _, Backbone, $) {
     "use strict";
     
@@ -39,6 +35,15 @@ define(["./utils",
     };
 
     var WidgetModel = Backbone.Model.extend({
+
+        defaults: {
+            _model_module: null,
+            _model_name: "WidgetModel",
+            _view_module: "",
+            _view_name: null,
+            msg_throttle: 3
+        },
+
         constructor: function (widget_manager, model_id, comm) {
             /**
              * Constructor
@@ -68,7 +73,6 @@ define(["./utils",
             this.isNew = function() { return false; };
 
             this.views = {};
-            this._resolve_received_state = {};
 
             if (comm) {
                 // Remember comm associated with the model.
@@ -110,27 +114,6 @@ define(["./utils",
                 this.comm.send(data, callbacks, {}, buffers);
                 this.pending_msgs++;
             }
-        },
-
-        request_state: function(callbacks) {
-            /** 
-             * Request a state push from the back-end.
-             */
-            if (!this.comm) {
-                console.error("Could not request_state because comm doesn't exist!");
-                return;
-            }
-
-            var msg_id = this.comm.send({
-                method: 'request_state'
-            }, callbacks || this.widget_manager.callbacks());
-
-            // Promise that resolves to the model when the state is received
-            // from the back-end.
-            var that = this;
-            return new Promise(function(resolve) {
-                that._resolve_received_state[msg_id] = resolve;
-            });
         },
 
         set_comm_live: function(live) {
@@ -215,15 +198,6 @@ define(["./utils",
                         }).then(function(state) {
                             that.set_state(state);
                         }).catch(utils.reject("Couldn't process update msg for model id '" + String(that.id) + "'", true))
-                        .then(function() {
-                            if (msg.parent_header) {
-                                var parent_id = msg.parent_header.msg_id;
-                                if (that._resolve_received_state[parent_id] !== undefined) {
-                                    that._resolve_received_state[parent_id](that);
-                                    delete that._resolve_received_state[parent_id];
-                                }
-                            }
-                        }).catch(utils.reject("Couldn't resolve state request promise", true));
                     return this.state_change;
                 case 'custom':
                     this.trigger('msg:custom', msg.content.data.content, msg.buffers);
@@ -240,7 +214,7 @@ define(["./utils",
             // Handle when a widget is updated via the python side.
             this.state_lock = state;
             try {
-                WidgetModel.__super__.set.call(this, state);
+                this.set(state);
                 if (this._first_state) {
                     this.trigger('ready', this);
                     this._first_state = false;
@@ -305,10 +279,16 @@ define(["./utils",
              */
             var return_value = WidgetModel.__super__.set.apply(this, arguments);
 
-            // Backbone only remembers the diff of the most recent set()
-            // operation.  Calling set multiple times in a row results in a
-            // loss of diff information.  Here we keep our own running diff.
-            this._buffered_state_diff = _.extend(this._buffered_state_diff, this.changedAttributes() || {});
+            if (!this._first_state) {
+                // Backbone only remembers the diff of the most recent set()
+                // operation.  Calling set multiple times in a row results in a
+                // loss of diff information.  Here we keep our own running diff.
+                //
+                // However, we don't buffer the initial state comming from the
+                // backend or the default values specified in `defaults`.
+                // 
+                this._buffered_state_diff = _.extend(this._buffered_state_diff, this.changedAttributes() || {});
+            }
             return return_value;
         },
 
@@ -548,7 +528,11 @@ define(["./utils",
         }
     };
 
-    var DOMWidgetModel = WidgetModel.extend({}, {
+    var DOMWidgetModel = WidgetModel.extend({
+        defaults: _.extend({}, WidgetModel.prototype.defaults, {
+            layout: undefined,
+        }),
+    }, {
         serializers: _.extend({
             layout: {deserialize: unpack_models},
         }, WidgetModel.serializers),
@@ -714,7 +698,7 @@ define(["./utils",
             });
         },
 
-        update_mapped_classes: function(class_map, trait_name, previous_trait_value, el) {
+        update_mapped_classes: function(class_map, trait_name, el) {
             /**
              * Update the DOM classes applied to the widget based on a single
              * trait's value.
@@ -736,15 +720,10 @@ define(["./utils",
              *      };
              * trait_name: string
              *  Name of the trait to check the value of.
-             * previous_trait_value: optional string, default ''
-             *  Last trait value
              * el: optional DOM element handle, defaults to this.$el
              *  Element that the classes are applied to.
              */
-            var key = previous_trait_value;
-            if (key === undefined) {
-                key = this.model.previous(trait_name);
-            }
+            var key = this.model.previous(trait_name);
             var old_classes = class_map[key] ? class_map[key] : [];
             key = this.model.get(trait_name);
             var new_classes = class_map[key] ? class_map[key] : [];
@@ -835,7 +814,7 @@ define(["./utils",
             });
         },
     });
-    
+
     managerBase.ManagerBase.register_widget_model('WidgetModel', WidgetModel);
 
     // For backwards compatibility.
@@ -843,16 +822,16 @@ define(["./utils",
     var DOMWidgetView = WidgetView.extend(DOMWidgetViewMixin);
 
     var widget = {
-        'unpack_models': unpack_models,
-        'WidgetModel': WidgetModel,
-        'WidgetViewMixin': WidgetViewMixin,
-        'DOMWidgetViewMixin': DOMWidgetViewMixin,
-        'ViewList': ViewList,
-        'DOMWidgetModel': DOMWidgetModel,
+        unpack_models: unpack_models,
+        WidgetModel: WidgetModel,
+        WidgetViewMixin: WidgetViewMixin,
+        DOMWidgetViewMixin: DOMWidgetViewMixin,
+        ViewList: ViewList,
+        DOMWidgetModel: DOMWidgetModel,
 
         // For backwards compatibility.
-        'WidgetView': WidgetView,
-        'DOMWidgetView': DOMWidgetView,
+        WidgetView: WidgetView,
+        DOMWidgetView: DOMWidgetView,
     };
 
     return widget;

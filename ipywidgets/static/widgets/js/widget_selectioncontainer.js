@@ -1,15 +1,29 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-// npm compatibility
-if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
-
 define([
     "./widget",
     "./utils",
+    "./widget_box",
     "jquery",
+    "underscore",
     "bootstrap",
-], function(widget, utils, $) {
+], function(widget, utils, box, $, _) {
+
+    var SelectionContainerModel = box.BoxModel.extend({
+        defaults: _.extend({}, box.BoxModel.prototype.defaults, {
+            _model_name: "SelectionContainerModel",
+            selected_index: 0,
+            _titles: {},
+        }),
+    });
+
+    var AccordionModel = SelectionContainerModel.extend({
+        defaults: _.extend({}, SelectionContainerModel.prototype.defaults, {
+            _model_name: "AccordionModel",
+            _view_name: "AccordionView"
+        }),
+    });
 
     var AccordionView = widget.DOMWidgetView.extend({
         initialize: function(){
@@ -30,7 +44,7 @@ define([
             var guid = 'panel-group' + utils.uuid();
             this.$el
                 .attr('id', guid)
-                .addClass('ipy-widget panel-group');
+                .addClass('jupyter-widgets panel-group');
             this.listenTo(this.model, 'change:selected_index', function(model, value, options) {
                 this.update_selected_index(options);
             }, this);
@@ -74,7 +88,7 @@ define([
                 this.expandTab(new_index);
             }
         },
-        
+
         /**
          * Collapses an accordion tab.
          * @param  {number} index
@@ -82,26 +96,26 @@ define([
         collapseTab: function(index) {
             // .children('.panel-collapse')
             var page = this.containers[index].children('.collapse');
-            
+
             if (page.hasClass('in')) {
                 page.removeClass('in');
                 page.collapse('hide');
             }
         },
-        
+
         /**
          * Expands an accordion tab.
          * @param  {number} index
          */
         expandTab: function(index) {
             var page = this.containers[index].children('.collapse');
-            
+
             if (!page.hasClass('in')) {
                 page.addClass('in');
                 page.collapse('show');
             }
         },
-        
+
         remove_child_view: function(view) {
             /**
              * Called when a child is removed from children list.
@@ -132,10 +146,9 @@ define([
                 .attr('data-toggle', 'collapse')
                 .attr('data-parent', '#' + this.$el.attr('id'))
                 .attr('href', '#' + uuid)
-                .click(function(evt) { 
-            
-                    // Calling model.set will trigger all of the other views of the 
-                    // model to update.
+                .click(function(evt) {
+                    // Calling model.set will trigger all of the other views of
+                    // the model to update.
                     that.model.set("selected_index", index, {updated_view: that});
                     that.touch();
                  })
@@ -150,7 +163,7 @@ define([
             var container_index = this.containers.push(accordion_group) - 1;
             accordion_group.container_index = container_index;
             this.model_containers[model.id] = accordion_group;
-            
+
             var dummy = $('<div/>');
             accordion_inner.append(dummy);
             return this.create_child_view(model).then(function(view) {
@@ -165,7 +178,7 @@ define([
                 return view;
             }).catch(utils.reject("Couldn't add child view to box", true));
         },
-        
+
         remove: function() {
             /**
              * We remove this widget before removing the children as an optimization
@@ -176,15 +189,20 @@ define([
             this.children_views.remove();
         },
     });
-    
 
-    var TabView = widget.DOMWidgetView.extend({    
+    var TabModel = SelectionContainerModel.extend({
+        defaults: _.extend({}, SelectionContainerModel.prototype.defaults, {
+            _model_name: "TabModel",
+            _view_name: "TabView"
+        }),
+    });
+
+    var TabView = widget.DOMWidgetView.extend({
         initialize: function() {
             /**
              * Public constructor.
              */
             TabView.__super__.initialize.apply(this, arguments);
-            
             this.containers = [];
             this.children_views = new widget.ViewList(this.add_child_view, this.remove_child_view, this);
             this.listenTo(this.model, 'change:children', function(model, value) {
@@ -242,13 +260,12 @@ define([
 
             var tab_text = $('<a />')
                 .attr('href', '#' + uuid)
-                .attr('data-toggle', 'tab') 
+                .attr('data-toggle', 'tab')
                 .text('Page ' + index)
                 .appendTo(tab)
                 .click(function (e) {
-            
-                    // Calling model.set will trigger all of the other views of the 
-                    // model to update.
+                    // Calling model.set will trigger all of the other views of
+                    // the model to update.
                     that.model.set("selected_index", index, {updated_view: that});
                     that.touch();
                     that.select_page(index);
@@ -281,7 +298,7 @@ define([
             /**
              * Update the contents of this view
              *
-             * Called when the model is changed.  The model may have been 
+             * Called when the model is changed.  The model may have been
              * changed by another view or by a state update from the back-end.
              */
             this.update_titles();
@@ -299,7 +316,7 @@ define([
                var tab_text = that.containers[page_index];
                 if (tab_text !== undefined) {
                     tab_text.text(title);
-                } 
+                }
             });
         },
 
@@ -323,7 +340,7 @@ define([
                 .removeClass('active');
             this.containers[index].tab('show');
         },
-        
+
         remove: function() {
             /**
              * We remove this widget before removing the children as an optimization
@@ -336,7 +353,10 @@ define([
     });
 
     return {
-        'AccordionView': AccordionView,
-        'TabView': TabView,
+        SelectionContainerModel: SelectionContainerModel,
+        AccordionModel: AccordionModel,
+        AccordionView: AccordionView,
+        TabModel: TabModel,
+        TabView: TabView,
     };
 });

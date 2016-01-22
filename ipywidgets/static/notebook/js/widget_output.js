@@ -3,31 +3,33 @@
 
 // This widget is strongly coupled to the notebook because of the outputarea
 // dependency.
-// TODO: Use jupyter-js-output-area to break the coupling to the notebook.
 define([
-    "./widget",
+    "jupyter-js-widgets",
     "jquery",
-    'notebook/js/outputarea',
-], function(widget, $, outputarea) {
-    'use strict';
+    "notebook/js/outputarea", // TODO: Use jupyter-js-output-area
+    "underscore",
+], function(widgets, $, outputarea, _) {
+    "use strict";
 
-    var OutputView = widget.DOMWidgetView.extend({
-        /**
-         * Public constructor
-         */
+    var OutputModel = widgets.DOMWidgetModel.extend({
+        defaults: _.extend({}, widgets.DOMWidgetModel.prototype.defaults, {
+            _model_name: "OutputModel",
+            _view_name: "OutputView"
+        }),
+    });
+
+    var OutputView = widgets.DOMWidgetView.extend({
+
         initialize: function (parameters) {
             OutputView.__super__.initialize.apply(this, [parameters]);
             this.listenTo(this.model, 'msg:custom', this._handle_route_msg, this);
         },
 
-        /**
-         * Called when view is rendered.
-         */
         render: function(){
             this.output_area = new outputarea.OutputArea({
-                selector: this.$el, 
-                prompt_area: false, 
-                events: this.model.widget_manager.notebook.events, 
+                selector: this.$el,
+                prompt_area: false,
+                events: this.model.widget_manager.notebook.events,
                 keyboard_manager: this.model.widget_manager.keyboard_manager });
 
             // Make output area reactive.
@@ -45,7 +47,7 @@ define([
             // Set initial contents.
             this.output_area.element.html(this.model.get('contents'));
         },
-        
+
         /**
          * Handles re-routed iopub messages.
          */
@@ -61,7 +63,11 @@ define([
         },
     });
 
+    widgets.ManagerBase.register_widget_model('OutputModel', OutputModel);
+    widgets.ManagerBase.register_widget_view('OutputView', OutputView);
+
     return {
-        'OutputView': OutputView,
+        OutputView: OutputView,
+        OutputModel: OutputModel,
     };
 });

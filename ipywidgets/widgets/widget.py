@@ -8,6 +8,7 @@ in the IPython notebook front-end.
 
 from contextlib import contextmanager
 import collections
+import sys
 
 from IPython.core.getipython import get_ipython
 from ipykernel.comm import Comm
@@ -99,9 +100,11 @@ def _show_traceback(method):
 
 def register(key=None):
     """Returns a decorator registering a widget class in the widget registry.
-    If no key is provided, the class name is used as a key. A key is
-    provided for each core IPython widget so that the frontend can use
-    this key regardless of the language of the kernel"""
+
+    If no key is provided, the class name is used as a key.
+    A key is provided for each core Jupyter widget so that the frontend can use
+    this key regardless of the language of the kernel.
+    """
     def wrap(widget):
         l = key if key is not None else widget.__module__ + widget.__name__
         Widget.widget_types[l] = widget
@@ -134,7 +137,11 @@ class Widget(LoggingConfigurable):
     @staticmethod
     def handle_comm_opened(comm, msg):
         """Static method, called when a widget is constructed."""
-        widget_class = import_item(str(msg['content']['data']['widget_class']))
+        class_name = str(msg['content']['data']['widget_class'])
+        if class_name in Widget.widget_types:
+            widget_class = Widget.widget_types[class_name]
+        else:
+            widget_class = import_item(class_name)
         widget = widget_class(comm=comm)
 
 
@@ -142,19 +149,17 @@ class Widget(LoggingConfigurable):
     # Traits
     #-------------------------------------------------------------------------
     _model_module = Unicode(None, allow_none=True, help="""A requirejs module name
-        in which to find _model_name. If empty, look in the global registry.""", sync=True)
+        in which to find _model_name. If empty, look in the global registry.""").tag(sync=True)
     _model_name = Unicode('WidgetModel', help="""Name of the backbone model
-        registered in the front-end to create and sync this widget with.""", sync=True)
+        registered in the front-end to create and sync this widget with.""").tag(sync=True)
     _view_module = Unicode(help="""A requirejs module in which to find _view_name.
-        If empty, look in the global registry.""", sync=True)
+        If empty, look in the global registry.""").tag(sync=True)
     _view_name = Unicode(None, allow_none=True, help="""Default view registered in the front-end
-        to use to represent the widget.""", sync=True)
+        to use to represent the widget.""").tag(sync=True)
     comm = Instance('ipykernel.comm.Comm', allow_none=True)
 
-    msg_throttle = Int(3, sync=True, help="""Maximum number of msgs the
-        front-end can send before receiving an idle msg from the back-end.""")
+    msg_throttle = Int(3, help="""Maximum number of msgs the front-end can send before receiving an idle msg from the back-end.""").tag(sync=True)
 
-    version = Int(0, sync=True, help="""Widget's version""")
     keys = List()
     def _keys_default(self):
         return [name for name in self.traits(sync=True)]
@@ -188,13 +193,11 @@ class Widget(LoggingConfigurable):
         """Open a comm to the frontend if one isn't already open."""
         if self.comm is None:
             state, buffer_keys, buffers = self._split_state_buffers(self.get_state())
-            
-            args = dict(target_name='ipython.widget',
-                        data=state,
-            )
+
+            args = dict(target_name='jupyter.widget', data=state)
             if self._model_id is not None:
                 args['comm_id'] = self._model_id
-            
+
             self.comm = Comm(**args)
             if buffers:
                 # FIXME: workaround ipykernel missing binary message support in open-on-init
@@ -297,11 +300,7 @@ class Widget(LoggingConfigurable):
                 if name in self.keys:
                     from_json = self.trait_metadata(name, 'from_json',
                                                     self._trait_from_json)
-                    # traitlets < 4.1 don't support read-only attributes
-                    if hasattr(self, 'set_trait'):
-                        self.set_trait(name, from_json(sync_data[name], self))
-                    else:
-                        setattr(self, name, from_json(sync_data[name], self))
+                    self.set_trait(name, from_json(sync_data[name], self))
 
     def send(self, content, buffers=None):
         """Sends a custom msg to the widget model in the front-end.
@@ -351,6 +350,18 @@ class Widget(LoggingConfigurable):
             if trait.get_metadata('sync'):
                  self.keys.append(name)
                  self.send_state(name)
+
+    def notify_change(self, change):
+        """Called when a property has changed."""
+        # Send the state before the user registered callbacks for trait changes
+        # have all fired.
+        name = change['name']
+        if self.comm is not None and name in self.keys:
+            # Make sure this isn't information that the front-end just sent us.
+            if self._should_send_property(name, change['new']):
+                # Send new state to front-end
+                self.send_state(key=name)
+        LoggingConfigurable.notify_change(self, change)
 
     #-------------------------------------------------------------------------
     # Support methods
@@ -429,19 +440,6 @@ class Widget(LoggingConfigurable):
         """Called when a custom msg is received."""
         self._msg_callbacks(self, content, buffers)
 
-    def _notify_trait(self, name, old_value, new_value):
-        """Called when a property has changed."""
-        # Send the state before the user registered callbacks for trait changess
-        # have all fired.
-        if self.comm is not None and name in self.keys:
-            # Make sure this isn't information that the front-end just sent us.
-            if self._should_send_property(name, new_value):
-                # Send new state to front-end
-                self.send_state(key=name)
-
-        # Trigger default traitlet callback machinery.
-        LoggingConfigurable._notify_trait(self, name, old_value, new_value)
-
     def _handle_displayed(self, **kwargs):
         """Called when a view has been displayed for this widget instance"""
         self._display_callbacks(self, **kwargs)
@@ -458,11 +456,34 @@ class Widget(LoggingConfigurable):
 
     def _ipython_display_(self, **kwargs):
         """Called when `IPython.display.display` is called on the widget."""
+        def loud_error(message):
+            self.log.warn(message)
+            sys.stderr.write('%s\n' % message)
+
         # Show view.
         if self._view_name is not None:
+            validated = Widget._version_validated
+
+            # Before the user tries to display a widget.  Validate that the
+            # widget front-end is what is expected.
+            if validated is None:
+                loud_error('Widget Javascript not detected.  It may not be installed properly.')
+            elif not validated:
+                loud_error('The installed widget Javascript is the wrong version.')
+
             self._send({"method": "display"})
             self._handle_displayed(**kwargs)
 
     def _send(self, msg, buffers=None):
         """Sends a message to the model in the front-end."""
         self.comm.send(data=msg, buffers=buffers)
+
+
+Widget._version_validated = None
+def handle_version_comm_opened(comm, msg):
+    """Called when version comm is opened, because the front-end wants to
+    validate the version."""
+    def handle_version_message(msg):
+        Widget._version_validated = msg['content']['data']['validated']
+    comm.on_msg(handle_version_message)
+    comm.send({'version': '4.1.0dev'})

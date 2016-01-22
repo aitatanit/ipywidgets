@@ -1,9 +1,6 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-// npm compatibility
-if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
-
 define([
     "./widget",
     "underscore",
@@ -12,13 +9,43 @@ define([
     "jquery-ui"
 ], function(widget, _, $) {
 
+    var IntModel = widget.DOMWidgetModel.extend({
+        defaults: _.extend({}, widget.DOMWidgetModel.prototype.defaults, {
+            _model_name: "IntModel",
+            value: 0,
+            disabled: false,
+            description: ""
+        }),
+    });
+
+    var BoundedIntModel = IntModel.extend({
+        defaults: _.extend({}, IntModel.prototype.defaults, {
+            _model_name: "BoundedIntModel",
+            step: 1,
+            max: 100,
+            min: 0
+        }),
+    });
+
+    var IntSliderModel = BoundedIntModel.extend({
+        defaults: _.extend({}, BoundedIntModel.prototype.defaults, {
+            _model_name: "IntSliderModel",
+            _view_name: "IntSliderView",
+            orientation: "horizontal",
+            _range: false,
+            readout: true,
+            slider_color: null,
+            continuous_update: true
+        }),
+    });
+
     var IntSliderView = widget.DOMWidgetView.extend({
         render : function() {
             /**
              * Called when view is rendered.
              */
             this.$el
-                .addClass('ipy-widget widget-hbox widget-hslider');
+                .addClass('jupyter-widgets widget-hbox widget-hslider');
             this.$label = $('<div />')
                 .appendTo(this.$el)
                 .addClass('widget-label')
@@ -27,7 +54,7 @@ define([
             this.$slider = $('<div />')
                 .slider({})
                 .addClass('slider');
-            // Put the slider in a container 
+            // Put the slider in a container
             this.$slider_container = $('<div />')
                 .addClass('slider-container')
                 .append(this.$slider);
@@ -41,7 +68,7 @@ define([
                 
             this.listenTo(this.model, 'change:slider_handleTextChangecolor', function(sender, value) {
                 this.$slider.find('a').css('background', value);
-            }, this);            
+            }, this);
             this.listenTo(this.model, 'change:description', function(sender, value) {
                 this.updateDescription();
             }, this);
@@ -336,14 +363,20 @@ define([
         },
     });
 
+    var IntTextModel = IntModel.extend({
+        defaults: _.extend({}, IntModel.prototype.defaults, {
+            _model_name: "IntTextModel",
+            _view_name: "IntTextView"
+        }),
+    });
 
-    var IntTextView = widget.DOMWidgetView.extend({    
+    var IntTextView = widget.DOMWidgetView.extend({
         render : function() {
             /**
              * Called when view is rendered.
              */
             this.$el
-                .addClass('ipy-widget widget-hbox widget-numeric-text');
+                .addClass('jupyter-widgets widget-hbox widget-numeric-text');
             this.$label = $('<div />')
                 .appendTo(this.$el)
                 .addClass('widget-label')
@@ -352,15 +385,15 @@ define([
                 .addClass('form-control')
                 .addClass('widget-numeric-text')
                 .appendTo(this.$el);
-                
+
             this.listenTo(this.model, 'change:description', function(sender, value) {
                 this.updateDescription();
             }, this);
-                
+
             this.update(); // Set defaults.
             this.updateDescription();
         },
-        
+
         updateDescription: function() {
             var description = this.model.get('description');
             if (description.length === 0) {
@@ -412,9 +445,9 @@ define([
 
             // Fires only when control is validated or looses focus.
             "change input" : "handleChanged"
-        }, 
+        },
         
-        handleChanging: function(e) { 
+        handleChanging: function(e) {
             /**
              * Handles and validates user input.
              *
@@ -443,15 +476,15 @@ define([
                 
                 // Apply the value if it has changed.
                 if (numericalValue != this.model.get('value')) {
-            
-                    // Calling model.set will trigger all of the other views of the 
+
+                    // Calling model.set will trigger all of the other views of the
                     // model to update.
                     this.model.set('value', numericalValue, {updated_view: this});
                     this.touch();
                 }
             }
         },
-        
+
         handleChanged: function(e) {
             /**
              * Applies validated input.
@@ -464,13 +497,21 @@ define([
         _parse_value: parseInt
     });
 
+    var ProgressModel = BoundedIntModel.extend({
+        defaults: _.extend({}, BoundedIntModel.prototype.defaults, {
+            _model_name: "ProgressModel",
+            _view_name: "ProgressView",
+            orientation: "horisontal",
+            bar_style: ""
+        }),
+    });
 
     var ProgressView = widget.DOMWidgetView.extend({
         render : function() {
             /**
              * Called when view is rendered.
              */
-            this.$el.addClass('ipy-widget widget-hprogress');
+            this.$el.addClass('jupyter-widgets widget-hprogress');
             this.$label = $('<div />')
                 .appendTo(this.$el)
                 .addClass('widget-label')
@@ -487,19 +528,17 @@ define([
                     'bottom': 0, 'left': 0,
                 })
                 .appendTo(this.$progress);
-            
+
             // Set defaults.
-            this.update(); 
+            this.update();
             this.updateDescription();
-           
-            this.listenTo(this.model, 'change:bar_style', function(model, value) {
-                this.update_bar_style();
-            }, this);
-            this.listenTo(this.model, 'change:description', function(sender, value) {
+
+            this.listenTo(this.model, "change:bar_style", this.update_bar_style, this);
+            this.listenTo(this.model, "change:description", function(sender, value) {
                 this.updateDescription();
             }, this);
             
-            this.update_bar_style('');
+            this.update_bar_style();
         },
         
         updateDescription: function() {
@@ -509,14 +548,14 @@ define([
             } else {
                 this.typeset(this.$label, description);
                 this.$label.show();
-            }    
+            }
         },
         
         update : function() {
             /**
              * Update the contents of this view
              *
-             * Called when the model is changed.  The model may have been 
+             * Called when the model is changed.  The model may have been
              * changed by another view or by a state update from the back-end.
              */
             var value = this.model.get('value');
@@ -546,23 +585,23 @@ define([
                 });
             }
             return ProgressView.__super__.update.apply(this);
-        }, 
+        },
 
-        update_bar_style: function(previous_trait_value) {
+        update_bar_style: function() {
             var class_map = {
                 success: ['progress-bar-success'],
                 info: ['progress-bar-info'],
                 warning: ['progress-bar-warning'],
                 danger: ['progress-bar-danger']
             };
-            this.update_mapped_classes(class_map, 'bar_style', previous_trait_value, this.$bar[0]);
+            this.update_mapped_classes(class_map, 'bar_style', this.$bar[0]);
         },
 
         update_attr: function(name, value) { // TODO: Deprecated in 5.0
             /**
              * Set a css attr of the widget view.
              */
-            if (name == 'color') {                
+            if (name == "color") {
                 this.$bar.css('background', value);
             } else if (name.substring(0, 6) == 'border' || name == 'background') {
                 this.$progress.css(name, value);
@@ -573,8 +612,13 @@ define([
     });
 
     return {
-        'IntSliderView': IntSliderView, 
-        'IntTextView': IntTextView,
-        'ProgressView': ProgressView,
+        IntModel: IntModel,
+        BoundedIntModel: BoundedIntModel,
+        IntSliderModel: IntSliderModel,
+        IntSliderView: IntSliderView,
+        IntTextModel: IntTextModel,
+        IntTextView: IntTextView,
+        ProgressModel: ProgressModel,
+        ProgressView: ProgressView,
     };
 });

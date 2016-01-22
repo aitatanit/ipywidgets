@@ -1,8 +1,8 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-// npm compatibility
-if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
+// jupyter-js-widgets version
+var version = '4.1.0dev';
 
 define([
     "underscore",
@@ -10,6 +10,7 @@ define([
     "./utils"
 ], function (_, Backbone, utils) {
     "use strict";
+    
     //--------------------------------------------------------------------
     // ManagerBase class
     //--------------------------------------------------------------------
@@ -19,7 +20,8 @@ define([
          */
         ManagerBase._managers.push(this);
         
-        this.comm_target_name = 'ipython.widget';
+        this.comm_target_name = 'jupyter.widget';
+        this.version_comm_target_name = 'jupyter.widget.version';
         this._models = {}; /* Dictionary of model ids and model instance promises */
     };
 
@@ -164,7 +166,7 @@ define([
     /**
      * Create a comm and new widget model.
      * @param  {Object} options - same options as new_model but, comm is not
-     *                          needed and additional options are available:
+     *                          needed and additional options are available.
      * @return {Promise<WidgetModel>}
      */
     ManagerBase.prototype.new_widget = function(options) {
@@ -174,8 +176,8 @@ define([
         } else {
             commPromise = this._create_comm(this.comm_target_name,
                                             options.model_id, {
-                'widget_class': options.widget_class,
-                'target_name': 'ipython.widget',
+                widget_class: options.widget_class,
+                target_name: 'jupyter.widget',
             });
         }
 
@@ -184,9 +186,7 @@ define([
         return commPromise.then(function(comm) {
             // Comm Promise Resolved.
             options_clone.comm = comm;
-            return that.new_model(options_clone).then(function(model) {
-                return model.request_state();
-            });
+            return that.new_model(options_clone);
         }, function() {
             // Comm Promise Rejected.
             if (!options_clone.model_id) {
@@ -194,6 +194,67 @@ define([
             }
             return that.new_model(options_clone);
         });
+    };
+
+    /**
+     * Parse a version string
+     * @param  {string} version i.e. "1.0.2dev" or "2.4"
+     * @return {object} version object {major, minor, patch, dev}
+     */
+    ManagerBase.prototype._parseVersion = function(version) {
+        if (!version) return null;
+        var versionParts = version.split('.');
+        var versionTail = versionParts.slice(-1)[0];
+        var versionSuffix = versionTail.slice(String(parseInt(versionTail)).length);
+        return {
+            major: parseInt(versionParts[0]),
+            minor: versionParts.length > 1 ? parseInt(versionParts[1]) : 0,
+            patch: versionParts.length > 2 ? parseInt(versionParts[2]) : 0,
+            dev: versionSuffix.trim().toLowerCase() === 'dev'
+        };
+    };
+    
+    /**
+     * Validate the version of the Javascript against the version requested by
+     * the backend.
+     * @return {Promise<Boolean>} Whether or not the versions are okay
+     */
+    ManagerBase.prototype.validateVersion = function() {
+        return this._create_comm(this.version_comm_target_name, undefined, {}).then((function(comm) {
+            return new Promise((function(resolve, reject) {
+                comm.on_msg((function(msg) {
+                    var validated = true;
+                    var backendVersion = this._parseVersion(msg.content.data.version);
+                    if (backendVersion) {
+                        var frontendVersion = this._parseVersion(version);
+                        if (frontendVersion.major !== backendVersion.major) {
+                            validated = false;
+                        }
+                        if (frontendVersion.minor < backendVersion.minor) {
+                            validated = false;
+                        }
+                        if (frontendVersion.patch < backendVersion.patch) {
+                            validated = false;
+                        }
+                        if (frontendVersion.dev && !backendVersion.dev) {
+                            if (!(frontendVersion.patch > backendVersion.patch || 
+                            frontendVersion.minor > backendVersion.minor)) {
+                                validated = false;
+                            }
+                        }
+                    } else {
+                        validated = false;
+                    }
+                    comm.send({'validated': validated});
+                    if (validated) console.info('Widget backend and frontend versions are compatible');
+                    resolve(validated);
+                }).bind(this));
+
+                setTimeout(function() {
+                    reject(new Error('Timeout while trying to cross validate the widget frontend and backend versions.'));
+                }, 3000);
+            }).bind(this));
+        }).bind(this));
     };
 
     ManagerBase.prototype.new_model = function(options) {
@@ -206,9 +267,9 @@ define([
          * Example
          * --------
          * JS:
-         * IPython.notebook.kernel.widget_manager.new_model({
+         * Jupyter.notebook.kernel.widget_manager.new_model({
          *      model_name: 'WidgetModel',
-         *      widget_class: 'ipywidgets.IntSlider'
+         *      widget_class: 'Jupyter.IntSlider'
          *  })
          *  .then(function(model) { console.log('Create success!', model); },
          *  _.bind(console.error, console));
@@ -322,31 +383,28 @@ define([
 
     ManagerBase.prototype.set_state = function(state) {
         /**
-         * Set the notebook's state.
+         * Set the widget manager state.
          *
          * Reconstructs all of the widget models and attempts to redisplay the
          * widgets in the appropriate cells by cell index.
          */
         var that = this;
 
-        // Recreate all the widget models for the given notebook state.
+        // Recreate all the widget models for the given widget manager state.
         var all_models = that._get_comm_info().then(function(live_comms) {
             return Promise.all(_.map(Object.keys(state), function (model_id) {
-                
+
                 // If the model has already been created, return it.
                 if (that._models[model_id]) {
                     return that._models[model_id];
                 }
-                
+
                 if (live_comms.hasOwnProperty(model_id)) {  // live comm
                     return that._create_comm(that.comm_target_name, model_id).then(function(new_comm) {
                         return that.new_model({
                             comm: new_comm,
                             model_name: state[model_id].model_name,
                             model_module: state[model_id].model_module,
-                        }).then(function(model) {
-                            // Request the state from the backend
-                            return model.request_state();
                         });
                     });
                 } else { // dead comm
@@ -384,6 +442,7 @@ define([
     };
 
     return {
-        'ManagerBase': ManagerBase
+        'ManagerBase': ManagerBase,
+        'version': version
     };
 });

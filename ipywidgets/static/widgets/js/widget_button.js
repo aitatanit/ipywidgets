@@ -1,14 +1,24 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-// npm compatibility
-if (typeof define !== 'function') { var define = require('./requirejs-shim')(module); }
-
 define([
     "./widget",
     "jquery",
+    "underscore",
     "bootstrap",
-], function(widget, $){
+], function(widget, $, _) {
+
+    var ButtonModel = widget.DOMWidgetModel.extend({
+        defaults: _.extend({}, widget.DOMWidgetModel.prototype.defaults, {
+            description: "",
+            tooltip: "",
+            disabled: false,
+            icon: "",
+            button_style: "",
+            _view_name: "ButtonView",
+            _model_name: "ButtonModel"
+        }),
+    });
 
     var ButtonView = widget.DOMWidgetView.extend({
         render: function() {
@@ -16,21 +26,19 @@ define([
              * Called when view is rendered.
              */
             this.setElement($("<button />")
-                .addClass('ipy-widget widget-button btn btn-default'));
+                .addClass('jupyter-widgets widget-button btn btn-default'));
             this.$el.attr("data-toggle", "tooltip");
-            this.listenTo(this.model, 'change:button_style', function(model, value) {
-                this.update_button_style();
-            }, this);
-            this.update_button_style('');
+            this.listenTo(this.model, "change:button_style", this.update_button_style, this);
+            this.update_button_style();
 
             this.update(); // Set defaults.
         },
-        
+
         update: function() {
             /**
              * Update the contents of this view
              *
-             * Called when the model is changed. The model may have been 
+             * Called when the model is changed. The model may have been
              * changed by another view or by a state update from the back-end.
              */
             this.$el.prop("disabled", this.model.get("disabled"));
@@ -48,7 +56,7 @@ define([
             return ButtonView.__super__.update.apply(this);
         },
 
-        update_button_style: function(previous_trait_value) {
+        update_button_style: function() {
             var class_map = {
                 primary: ['btn-primary'],
                 success: ['btn-success'],
@@ -56,14 +64,14 @@ define([
                 warning: ['btn-warning'],
                 danger: ['btn-danger']
             };
-            this.update_mapped_classes(class_map, 'button_style', previous_trait_value);
+            this.update_mapped_classes(class_map, 'button_style');
         },
 
         events: {
             // Dictionary of events and their handlers.
             'click': '_handle_click',
         },
-        
+
         _handle_click: function() {
             /**
              * Handles when the button is clicked.
@@ -73,6 +81,7 @@ define([
     });
 
     return {
-        'ButtonView': ButtonView,
+        ButtonView: ButtonView,
+        ButtonModel: ButtonModel
     };
 });

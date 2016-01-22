@@ -237,10 +237,6 @@ def test_list_tuple_str():
 def test_list_tuple_invalid():
     for bad in [
         (),
-        (5, 'hi'),
-        ('hi', 5),
-        ({},),
-        (None,),
     ]:
         with nt.assert_raises(ValueError):
             print(bad) # because there is no custom message in assert_raises
@@ -715,3 +711,14 @@ def test_multiple_selection():
     with nt.assert_raises(KeyError):
         w.value = (2,)
     check_widget(w, options={1: 1})
+
+
+def test_interact_noinspect():
+    a = u'hello'
+    c = interactive(print, a=a)
+    w = c.children[0]
+    check_widget(w,
+        cls=widgets.Text,
+        description='a',
+        value=a,
+    )
