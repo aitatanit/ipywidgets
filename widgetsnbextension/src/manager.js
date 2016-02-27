@@ -67,13 +67,9 @@ var WidgetManager = function (comm_manager, notebook) {
                     model_name: widget_info.msg.content.data.state._model_name,
                     model_module: widget_info.msg.content.data.state._model_module,
                     comm: widget_info.comm,
-                }).then(function(model) {
-                    return model._handle_comm_msg(widget_info.msg).then(function() {
-                        return model.id;
-                    });
-                });
+                }, widget_info.msg.content.data.state);
             }));
-        }).then(function(model_ids) {
+        }).then(function(models) {
 
             // Load the initial state of the widget manager if a load callback was
             // registered.
@@ -367,10 +363,7 @@ WidgetManager.prototype.updateSnapshots = function() {
 
         // Disable overflow to prevent the document from having elements
         // that are scrolled out of visibility.
-        var siteScrollTop = site.scrollTop;
         site.style.overflow = 'visible';
-        site.style.position = 'relative';
-        site.style.top = '-' + siteScrollTop + 'px';
         document.body.style.overflow = 'hidden';
 
         // Render the widgets of each cell.
@@ -406,9 +399,8 @@ WidgetManager.prototype.updateSnapshots = function() {
                 } else {
                     if (widgetSubarea && widgetSubarea.widgetSnapshot) {
                         delete widgetSubarea.widgetSnapshot;
-
-                        return that.progressModal.setValue(++progress/cells.length);
                     }
+                    return that.progressModal.setValue(++progress/cells.length);
                 }
             });
         });
@@ -417,8 +409,6 @@ WidgetManager.prototype.updateSnapshots = function() {
         // notebook.
         return renderPromise.then(function() {
             site.style.overflow = '';
-            site.style.position = '';
-            site.style.top = '';
             document.body.style.overflow = '';
         });
 
