@@ -37,9 +37,9 @@ var unpack_models = function unpack_models(value, manager) {
 var WidgetModel = Backbone.Model.extend({
 
     defaults: {
-        _model_module: null,
+        _model_module: "jupyter-js-widgets",
         _model_name: "WidgetModel",
-        _view_module: "",
+        _view_module: "jupyter-js-widgets",
         _view_name: null,
         msg_throttle: 3
     },
@@ -82,25 +82,11 @@ var WidgetModel = Backbone.Model.extend({
             comm.on_close(_.bind(this._handle_comm_closed, this));
             comm.on_msg(_.bind(this._handle_comm_msg, this));
 
-            this.set_comm_live(true);
+            this.comm_live = true;
         } else {
             this.comm_live = false;
         }
 
-        // Listen for the events that lead to the websocket being terminated.
-        var that = this;
-        var died = function() {
-            that.set_comm_live(false);
-        };
-
-        // TODO: Move this logic into manager-base, so users can override it.
-        // Also, notebook related logic should not live in widget!!!
-        if (widget_manager.notebook) {
-            widget_manager.notebook.events.on('kernel_disconnected.Kernel', died);
-            widget_manager.notebook.events.on('kernel_killed.Kernel', died);
-            widget_manager.notebook.events.on('kernel_restarting.Kernel', died);
-            widget_manager.notebook.events.on('kernel_dead.Kernel', died);
-        }
         WidgetModel.__super__.constructor.apply(this, [attributes]);
     },
 
@@ -112,16 +98,6 @@ var WidgetModel = Backbone.Model.extend({
             var data = {method: 'custom', content: content};
             this.comm.send(data, callbacks, {}, buffers);
             this.pending_msgs++;
-        }
-    },
-
-    set_comm_live: function(live) {
-        /**
-         * Change the comm_live state of the model.
-         */
-        if (this.comm_live === undefined || this.comm_live != live) {
-            this.comm_live = live;
-            this.trigger(live ? 'comm:live' : 'comm:dead', {model: this});
         }
     },
 
@@ -199,10 +175,25 @@ var WidgetModel = Backbone.Model.extend({
         }
     },
 
-    get_state: function() {
-        // Get the serializable state of the model.
-        // Equivalent to Backbone.Model.toJSON()
-        return _.clone(this.attributes);
+    get_state: function(drop_defaults) {
+        /**
+         * Get the serializable state of the model.
+         *
+         * If drop_default is thruthy, attributes that are equal to their default
+         * values are dropped.
+         */
+        var state = this.attributes;
+        if (drop_defaults) {
+            var defaults = _.result(this, 'defaults');
+            return Object.keys(state).reduce(function(obj, key) {
+                if (!_.isEqual(state[key], defaults[key])) {
+                    obj[key] = state[key];
+                }
+                return obj;
+            }, {});
+        } else {
+            return _.clone(state);
+        }
     },
 
     _handle_status: function (msg, callbacks) {
@@ -347,7 +338,6 @@ var WidgetModel = Backbone.Model.extend({
         this._buffered_state_diff = {};
     },
 
-
     send_sync_message: function(attrs, callbacks) {
         // prepare and send a comm message syncing attrs
         var that = this;
@@ -425,7 +415,7 @@ var WidgetModel = Backbone.Model.extend({
 }, {
     _deserialize_state: function(state, manager) {
         /**
-         * Returns a promised for the deserialized state. The second argument
+         * Returns a promise for the deserialized state. The second argument
          * is an instance of widget manager, which is required for the
          * deserialization of widget models.
          */
@@ -445,6 +435,27 @@ var WidgetModel = Backbone.Model.extend({
         }
         return utils.resolvePromisesDict(deserialized);
     },
+    _serialize_state: function(state, manager) {
+        /**
+         * Returns a promise for the serialized state. The second argument
+         * is an instance of widget manager.
+         */
+        var serializers = this.serializers;
+        var serialized;
+        if (serializers) {
+            serialized = {};
+            for (var k in state) {
+                if (serializers[k] && serializers[k].serialize) {
+                     serialized[k] = (serializers[k].serialize)(state[k], manager);
+                } else {
+                     serialized[k] = state[k];
+                }
+            }
+        } else {
+            serialized = state;
+        }
+        return utils.resolvePromisesDict(serialized);
+    }
 });
 
 
@@ -454,14 +465,6 @@ var WidgetViewMixin = {
          * Public constructor.
          */
         this.listenTo(this.model, 'change', this.update, this);
-
-        // Bubble the comm live events.
-        this.listenTo(this.model, 'comm:live', function() {
-            this.trigger('comm:live', this);
-        }, this);
-        this.listenTo(this.model, 'comm:dead', function() {
-            this.trigger('comm:dead', this);
-        }, this);
 
         this.options = parameters.options;
         /**
@@ -527,14 +530,31 @@ var WidgetViewMixin = {
 var DOMWidgetModel = WidgetModel.extend({
     defaults: _.extend({}, WidgetModel.prototype.defaults, {
         layout: undefined,
+        visible: true,
+        _dom_classes: [],
+
+        // Deprecated attributes
+        color: null,
+        height: "",
+        border_radius: "",
+        border_width: "",
+        background_color: null,
+        font_style: "",
+        width: "",
+        font_family: "",
+        border_color: null,
+        padding: "",
+        font_weight: "",
+        icon: "",
+        border_style: "",
+        font_size: "",
+        margin: ""
     }),
 }, {
     serializers: _.extend({
         layout: {deserialize: unpack_models},
     }, WidgetModel.serializers),
 });
-
-managerBase.ManagerBase.register_widget_model('DOMWidgetModel', DOMWidgetModel);
 
 var DOMWidgetViewMixin = {
     initialize: function (parameters) {
@@ -818,8 +838,6 @@ _.extend(ViewList.prototype, {
         });
     },
 });
-
-managerBase.ManagerBase.register_widget_model('WidgetModel', WidgetModel);
 
 // For backwards compatibility.
 var WidgetView = Backbone.View.extend(WidgetViewMixin);

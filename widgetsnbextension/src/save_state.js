@@ -6,10 +6,12 @@
 var save_state = function() {
     return new Promise(function(resolve) {
         requirejs(["base/js/namespace"], function(Jupyter) {
-            return Jupyter.WidgetManager._managers[0].get_state().then(function(state) {
+            return Jupyter.WidgetManager._managers[0].get_state({
+                'drop_defaults': true
+            }).then(function(state) {
                 var data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, "    "));
                 var a = document.createElement("a");
-                a.download = "state.json";
+                a.download = "widget_state.json";
                 a.href = "data:" + data;
                 a.click();
             });

@@ -10,10 +10,10 @@ var _ = require("underscore");
 var SelectionModel = widget.DOMWidgetModel.extend({
     defaults: _.extend({}, widget.DOMWidgetModel.prototype.defaults, {
         _model_name: "SelectionModel",
-        selected_label: "",
+        value: "",
         _options_labels: [],
         disabled: false,
-        description: "",
+        description: ""
     }),
 });
 
@@ -103,7 +103,7 @@ var DropdownView = widget.DOMWidgetView.extend({
          */
 
         if (options === undefined || options.updated_view != this) {
-            var selected_item_text = this.model.get('selected_label');
+            var selected_item_text = this.model.get('value');
             if (selected_item_text.trim().length === 0) {
                 this.$droplabel.html("&nbsp;");
             } else {
@@ -182,7 +182,7 @@ var DropdownView = widget.DOMWidgetView.extend({
          * Calling model.set will trigger all of the other views of the
          * model to update.
          */
-        this.model.set('selected_label', $(e.target).text(), {updated_view: this});
+        this.model.set('value', $(e.target).text(), {updated_view: this});
         this.touch();
 
         // Manually hide the droplist.
@@ -250,7 +250,7 @@ var RadioButtonsView = widget.DOMWidgetView.extend({
                 }
 
                 var $item_element = that.$container.find(item_query);
-                if (that.model.get('selected_label') == item) {
+                if (that.model.get('value') == item) {
                     $item_element.prop('checked', true);
                 } else {
                     $item_element.prop('checked', false);
@@ -304,7 +304,7 @@ var RadioButtonsView = widget.DOMWidgetView.extend({
          * Calling model.set will trigger all of the other views of the
          * model to update.
          */
-        this.model.set('selected_label', $(e.target).val(), {updated_view: this});
+        this.model.set('value', $(e.target).val(), {updated_view: this});
         this.touch();
     },
 });
@@ -379,7 +379,7 @@ var ToggleButtonsView = widget.DOMWidgetView.extend({
                     that.update_style_traits($item_element);
                     $icon_element = $('<i class="fa"></i>').prependTo($item_element);
                 }
-                if (that.model.get('selected_label') == item) {
+                if (that.model.get('value') == item) {
                     $item_element.addClass('active');
                 } else {
                     $item_element.removeClass('active');
@@ -465,7 +465,7 @@ var ToggleButtonsView = widget.DOMWidgetView.extend({
          * Calling model.set will trigger all of the other views of the
          * model to update.
          */
-        this.model.set('selected_label', $(e.target).attr('value'), {updated_view: this});
+        this.model.set('value', $(e.target).attr('value'), {updated_view: this});
         this.touch();
     },
 });
@@ -520,7 +520,7 @@ var SelectView = widget.DOMWidgetView.extend({
             });
 
             // Select the correct element
-            this.$listbox.val(this.model.get('selected_label'));
+            this.$listbox.val(this.model.get('value'));
 
             // Disable listbox if needed
             var disabled = this.model.get('disabled');
@@ -578,7 +578,7 @@ var SelectView = widget.DOMWidgetView.extend({
          * Calling model.set will trigger all of the other views of the
          * model to update.
          */
-        this.model.set('selected_label', this.$listbox.val(), {updated_view: this});
+        this.model.set('value', this.$listbox.val(), {updated_view: this});
         this.touch();
     },
 });
@@ -588,7 +588,8 @@ var SelectionSliderModel = SelectionModel.extend({
         _model_name: "SelectionSliderModel",
         _view_name: "SelectionSliderView",
         orientation: "horizontal",
-        readout: true
+        readout: true,
+        continuous_update: true
     }),
 });
 
@@ -605,8 +606,12 @@ var SelectionSliderView = widget.DOMWidgetView.extend({
             .hide();
 
         this.$slider = $('<div />')
-            .slider({})
+            .slider({
+                slide: this.handleSliderChange.bind(this),
+                stop: this.handleSliderChanged.bind(this)
+            })
             .addClass('slider');
+
         // Put the slider in a container
         this.$slider_container = $('<div />')
             .addClass('slider-container')
@@ -618,7 +623,7 @@ var SelectionSliderView = widget.DOMWidgetView.extend({
             .addClass('widget-readout')
             .hide();
 
-        this.listenTo(this.model, 'change:slider_handleTextChangecolor', function(sender, value) {
+        this.listenTo(this.model, 'change:slider_color', function(sender, value) {
             this.$slider.find('a').css('background', value);
         }, this);
         this.listenTo(this.model, 'change:description', function(sender, value) {
@@ -687,13 +692,13 @@ var SelectionSliderView = widget.DOMWidgetView.extend({
             this.$slider.slider('option', 'value', min);
             this.$slider.slider('option', 'orientation', orientation);
 
-            var selected_label = this.model.get("selected_label");
-            var index = labels.indexOf(selected_label);
+            var value = this.model.get('value');
+            var index = labels.indexOf(value);
             this.$slider.slider('option', 'value', index);
-            this.$readout.text(selected_label);
+            this.$readout.text(value);
 
             // Use the right CSS classes for vertical & horizontal sliders
-            if (orientation=='vertical') {
+            if (orientation === 'vertical') {
                 this.$el
                     .removeClass('widget-hslider')
                     .addClass('widget-vslider');
@@ -731,8 +736,8 @@ var SelectionSliderView = widget.DOMWidgetView.extend({
      */
     handleSliderChange: function(e, ui) {
         var actual_value = this._validate_slide_value(ui.value);
-        var selected_label = this.model.get("_options_labels")[actual_value];
-        this.$readout.text(selected_label);
+        var value = this.model.get("_options_labels")[actual_value];
+        this.$readout.text(value);
 
         // Only persist the value while sliding if the continuous_update
         // trait is set to true.
@@ -749,9 +754,9 @@ var SelectionSliderView = widget.DOMWidgetView.extend({
      */
     handleSliderChanged: function(e, ui) {
         var actual_value = this._validate_slide_value(ui.value);
-        var selected_label = this.model.get("_options_labels")[actual_value];
-        this.$readout.text(selected_label);
-        this.model.set('selected_label', selected_label, {updated_view: this});
+        var value = this.model.get("_options_labels")[actual_value];
+        this.$readout.text(value);
+        this.model.set('value', value, {updated_view: this});
         this.touch();
     },
 
@@ -769,7 +774,6 @@ var SelectionSliderView = widget.DOMWidgetView.extend({
 var MultipleSelectionModel = SelectionModel.extend({
     defaults: _.extend({}, SelectionModel.prototype.defaults, {
         _model_name: "MultipleSelectionModel",
-        selected_labels: [],
     }),
 });
 
@@ -792,7 +796,7 @@ var SelectMultipleView = SelectView.extend({
           .on('change', $.proxy(this.handle_change, this));
 
         // set selected labels *after* setting the listbox to be multiple selection
-        this.$listbox.val(this.model.get('selected_labels'));
+        this.$listbox.val(this.model.get('value'));
         return this;
     },
 
@@ -804,7 +808,7 @@ var SelectMultipleView = SelectView.extend({
          * changed by another view or by a state update from the back-end.
          */
         SelectMultipleView.__super__.update.apply(this, arguments);
-        this.$listbox.val(this.model.get('selected_labels'));
+        this.$listbox.val(this.model.get('value'));
     },
 
     handle_click: function() {
@@ -828,12 +832,12 @@ var SelectMultipleView = SelectView.extend({
         // type information correctly, we need to map the selected indices
         // to the options list.
         var items = this.model.get('_options_labels');
-        var values = Array.prototype.map.call(this.$listbox[0].selectedOptions || [], function(option) {
+        var value = Array.prototype.map.call(this.$listbox[0].selectedOptions || [], function(option) {
             return items[option.index];
         });
 
-        this.model.set('selected_labels',
-            values,
+        this.model.set('value',
+            value,
             {updated_view: this});
         this.touch();
     },

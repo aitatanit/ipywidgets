@@ -1,6 +1,3 @@
-require('bootstrap/dist/css/bootstrap.css')
-require('jquery-ui/themes/smoothness/jquery-ui.min.css')
-
 var widgets = require('jupyter-js-widgets');
 console.info('jupyter-js-widgets loaded successfully');
 
@@ -15,6 +12,7 @@ WidgetManager.prototype.display_view = function(msg, view, options) {
     var that = this;
     return Promise.resolve(view).then(function(view) {
         that.el.appendChild(view.el);
+        view.trigger('displayed');
         view.on('remove', function() {
             console.log('View removed', view);
         });

@@ -1,11 +1,11 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
-"use strict";
+'use strict';
 
 window['requirejs'].config({
     map: {
-        "*": {
-            "jupyter-js-widgets": "nbextensions/widgets/extension",
+        '*': {
+            'jupyter-js-widgets': 'nbextensions/jupyter-js-widgets/extension',
         },
     }
 });
@@ -13,6 +13,7 @@ window['requirejs'].config({
 var mngr = require("./manager");
 var widgetarea = require("./widgetarea");
 require("./save_state");
+require("./embed_widgets");
 require("./widget_output");
 
 /**
@@ -93,4 +94,4 @@ function load_ipython_extension () {
 var _ = require('underscore');
 module.exports = _.extend({
   load_ipython_extension: load_ipython_extension,
-}, require('jupyter-js-widgets'));
+}, require('jupyter-js-widgets'), require('./widget_output'));

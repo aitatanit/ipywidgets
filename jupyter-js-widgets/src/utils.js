@@ -57,19 +57,48 @@ WrappedError.prototype = Object.create(Error.prototype, {});
  * Tries to load a class from a module using require.js, if a module
  * is specified, otherwise tries to load a class from the global
  * registry, if the global registry is provided.
+ *
+ * The optional require_error argument is a function that takes the success
+ * handler and returns a requirejs error handler, which may call the success
+ * handler with a fallback module.
+ *
  */
-function loadClass(class_name, module_name, registry) {
+function loadClass(class_name, module_name, registry, require_error) {
     return new Promise(function(resolve, reject) {
 
         // Try loading the view module using require.js
         if (module_name) {
-            requirejs([module_name], function(module) {
+
+            // If the module is jupyter-js-widgets, we can just self import.
+            var modulePromise;
+            var requirejsDefined = typeof window !== 'undefined' && window.requirejs;
+            if (requirejsDefined) {
+                if (module_name !== 'jupyter-js-widgets' || window.requirejs.defined('jupyter-js-widgets')) {
+                    modulePromise = new Promise(function(innerResolve, innerReject) {
+                        var success_callback = function(module) {
+                            innerResolve(module);
+                        };
+                        var failure_callback = require_error ? require_error(success_callback) : innerReject;
+                        window.require([module_name], success_callback, failure_callback);
+                    });
+                } else if (module_name === 'jupyter-js-widgets') {
+                    modulePromise = Promise.resolve(require('../'));
+                }
+            } else if (module_name === 'jupyter-js-widgets') {
+                modulePromise = Promise.resolve(require('../'));
+            } else {
+                // FUTURE: Investigate dynamic loading methods other than require.js.
+                throw new Error(['In order to use third party widgets, you ',
+                    'must have require.js loaded on the page.'].join(''));
+            }
+
+            modulePromise.then(function(module) {
                 if (module[class_name] === undefined) {
                     reject(new Error('Class '+class_name+' not found in module '+module_name));
                 } else {
                     resolve(module[class_name]);
                 }
-            }, reject);
+            });
         } else {
             if (registry && registry[class_name]) {
                 resolve(registry[class_name]);

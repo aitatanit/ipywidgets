@@ -14,6 +14,8 @@ import nose.tools as nt
 
 from ipykernel.comm import Comm
 import ipywidgets as widgets
+
+from traitlets import TraitError
 from ipywidgets import interact, interactive, Widget, interaction
 from ipython_genutils.py3compat import annotate
 
@@ -543,14 +545,9 @@ def test_int_range_logic():
     irsw = widgets.IntRangeSlider
     w = irsw(value=(2, 4), min=0, max=6)
     check_widget(w, cls=irsw, value=(2, 4), min=0, max=6)
-    w.value = (4, 2)
-    check_widget(w, cls=irsw, value=(2, 4), min=0, max=6)
-    w.value = (-1, 7)
-    check_widget(w, cls=irsw, value=(0, 6), min=0, max=6)
-    w.min = 3
-    check_widget(w, cls=irsw, value=(3, 6), min=3, max=6)
+    w.upper = 3
     w.max = 3
-    check_widget(w, cls=irsw, value=(3, 3), min=3, max=3)
+    check_widget(w, cls=irsw, value=(2, 3), min=0, max=3)
 
     w.min = 0
     w.max = 6
@@ -561,55 +558,27 @@ def test_int_range_logic():
     check_widget(w, cls=irsw, value=(0, 1), min=0, max=6)
     w.value = (5, 6) #upper non-overlapping range
     check_widget(w, cls=irsw, value=(5, 6), min=0, max=6)
-    w.value = (-1, 4) #semi out-of-range
-    check_widget(w, cls=irsw, value=(0, 4), min=0, max=6)
     w.lower = 2
-    check_widget(w, cls=irsw, value=(2, 4), min=0, max=6)
-    w.value = (-2, -1) #wholly out of range
-    check_widget(w, cls=irsw, value=(0, 0), min=0, max=6)
-    w.value = (7, 8)
-    check_widget(w, cls=irsw, value=(6, 6), min=0, max=6)
+    check_widget(w, cls=irsw, value=(2, 6), min=0, max=6)
 
-    with nt.assert_raises(ValueError):
+    with nt.assert_raises(TraitError):
         w.min = 7
-    with nt.assert_raises(ValueError):
+    with nt.assert_raises(TraitError):
         w.max = -1
-    with nt.assert_raises(ValueError):
-        w.lower = 5
-    with nt.assert_raises(ValueError):
-        w.upper = 1
 
-    w = irsw(min=2, max=3)
-    check_widget(w, min=2, max=3)
-    w = irsw(min=100, max=200)
-    check_widget(w, lower=125, upper=175, value=(125, 175))
+    w = irsw(min=2, max=3, value=(2, 3))
+    check_widget(w, min=2, max=3, value=(2, 3))
+    w = irsw(min=100, max=200, value=(125, 175))
+    check_widget(w, value=(125, 175))
 
-    with nt.assert_raises(ValueError):
-        irsw(value=(2, 4), lower=3)
-    with nt.assert_raises(ValueError):
-        irsw(value=(2, 4), upper=3)
-    with nt.assert_raises(ValueError):
-        irsw(value=(2, 4), lower=3, upper=3)
-    with nt.assert_raises(ValueError):
+    with nt.assert_raises(TraitError):
         irsw(min=2, max=1)
-    with nt.assert_raises(ValueError):
-        irsw(lower=5)
-    with nt.assert_raises(ValueError):
-        irsw(upper=5)
 
 
 def test_float_range_logic():
     frsw = widgets.FloatRangeSlider
     w = frsw(value=(.2, .4), min=0., max=.6)
     check_widget(w, cls=frsw, value=(.2, .4), min=0., max=.6)
-    w.value = (.4, .2)
-    check_widget(w, cls=frsw, value=(.2, .4), min=0., max=.6)
-    w.value = (-.1, .7)
-    check_widget(w, cls=frsw, value=(0., .6), min=0., max=.6)
-    w.min = .3
-    check_widget(w, cls=frsw, value=(.3, .6), min=.3, max=.6)
-    w.max = .3
-    check_widget(w, cls=frsw, value=(.3, .3), min=.3, max=.3)
 
     w.min = 0.
     w.max = .6
@@ -620,41 +589,19 @@ def test_float_range_logic():
     check_widget(w, cls=frsw, value=(0., .1), min=0., max=.6)
     w.value = (.5, .6) #upper non-overlapping range
     check_widget(w, cls=frsw, value=(.5, .6), min=0., max=.6)
-    w.value = (-.1, .4) #semi out-of-range
-    check_widget(w, cls=frsw, value=(0., .4), min=0., max=.6)
     w.lower = .2
-    check_widget(w, cls=frsw, value=(.2, .4), min=0., max=.6)
-    w.value = (-.2, -.1) #wholly out of range
-    check_widget(w, cls=frsw, value=(0., 0.), min=0., max=.6)
-    w.value = (.7, .8)
-    check_widget(w, cls=frsw, value=(.6, .6), min=.0, max=.6)
+    check_widget(w, cls=frsw, value=(.2, .6), min=0., max=.6)
 
-    with nt.assert_raises(ValueError):
+    with nt.assert_raises(TraitError):
         w.min = .7
-    with nt.assert_raises(ValueError):
+    with nt.assert_raises(TraitError):
         w.max = -.1
-    with nt.assert_raises(ValueError):
-        w.lower = .5
-    with nt.assert_raises(ValueError):
-        w.upper = .1
 
-    w = frsw(min=2, max=3)
+    w = frsw(min=2, max=3, value=(2.2, 2.5))
     check_widget(w, min=2, max=3)
-    w = frsw(min=1., max=2.)
-    check_widget(w, lower=1.25, upper=1.75, value=(1.25, 1.75))
 
-    with nt.assert_raises(ValueError):
-        frsw(value=(2, 4), lower=3)
-    with nt.assert_raises(ValueError):
-        frsw(value=(2, 4), upper=3)
-    with nt.assert_raises(ValueError):
-        frsw(value=(2, 4), lower=3, upper=3)
-    with nt.assert_raises(ValueError):
+    with nt.assert_raises(TraitError):
         frsw(min=.2, max=.1)
-    with nt.assert_raises(ValueError):
-        frsw(lower=5)
-    with nt.assert_raises(ValueError):
-        frsw(upper=5)
 
 
 def test_multiple_selection():
@@ -662,21 +609,21 @@ def test_multiple_selection():
 
     # degenerate multiple select
     w = smw()
-    check_widget(w, value=tuple(), options=None, selected_labels=tuple())
+    check_widget(w, value=tuple())
 
     # don't accept random other value when no options
-    with nt.assert_raises(KeyError):
+    with nt.assert_raises(TraitError):
         w.value = (2,)
-    check_widget(w, value=tuple(), selected_labels=tuple())
+    check_widget(w, value=tuple())
 
     # basic multiple select
     w = smw(options=[(1, 1)], value=[1])
     check_widget(w, cls=smw, value=(1,), options=[(1, 1)])
 
     # don't accept random other value
-    with nt.assert_raises(KeyError):
+    with nt.assert_raises(TraitError):
         w.value = w.value + (2,)
-    check_widget(w, value=(1,), selected_labels=(1,))
+    check_widget(w, value=(1,))
 
     # change options
     w.options = w.options + [(2, 2)]
@@ -684,31 +631,14 @@ def test_multiple_selection():
 
     # change value
     w.value = w.value + (2,)
-    check_widget(w, value=(1, 2), selected_labels=(1, 2))
-
-    # change value name
-    w.selected_labels = (1,)
-    check_widget(w, value=(1,))
-
-    # don't accept random other names when no options
-    with nt.assert_raises(KeyError):
-        w.selected_labels = (3,)
-    check_widget(w, value=(1,))
-
-    # don't accept selected_label (from superclass)
-    with nt.assert_raises(AttributeError):
-        w.selected_label = 3
-
-    # don't return selected_label (from superclass)
-    with nt.assert_raises(AttributeError):
-        print(w.selected_label)
+    check_widget(w, value=(1, 2))
 
     # dict style
     w.options = {1: 1}
     check_widget(w, options={1: 1})
 
     # updating
-    with nt.assert_raises(KeyError):
+    with nt.assert_raises(TraitError):
         w.value = (2,)
     check_widget(w, options={1: 1})
 
