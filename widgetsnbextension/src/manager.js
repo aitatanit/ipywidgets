@@ -73,11 +73,17 @@ var WidgetManager = function (comm_manager, notebook) {
             }));
         }).then(function(models) {
 
-            // Load the initial state of the widget manager if a load callback was
-            // registered.
+            // Load the view information from the notebook metadata.
             if (WidgetManager._load_callback) {
                 WidgetManager._load_callback.call(that).then(function(state) {
-                    that.set_state(state);
+                    var filtered_state = Object.keys(state).reduce(function(obj, key) {
+                        // Filter for keys that are live model ids.
+                        if (that.get_model(key)) {
+                            obj[key] = state[key];
+                        }
+                        return obj;
+                    }, {});
+                    that.set_state(filtered_state);
                 }).catch(widgets.reject('Error loading widget manager state', true));
             }
         });
@@ -106,7 +112,7 @@ var WidgetManager = function (comm_manager, notebook) {
                 console.warn('Widget frontend version does not match the backend.');
             }
         }).catch(function(err) {
-            console.error('Could not cross validate the widget frontend and backend versions.', err);
+            console.warn('Could not cross validate the widget frontend and backend versions.', err);
         });
     }).bind(this);
     validate();
@@ -333,7 +339,13 @@ WidgetManager.prototype.display_view = function(msg, view, options) {
     }
 };
 
-WidgetManager.prototype.setViewOptions = function(options) {
+WidgetManager.prototype.filterViewOptions = function (options) {
+    return {
+        cell_index : options.cell_index
+    };
+};
+
+WidgetManager.prototype.setViewOptions = function (options) {
     var options = options || {};
     // If a view is passed into the method, use that view's cell as
     // the cell for the view that is created.
@@ -341,7 +353,7 @@ WidgetManager.prototype.setViewOptions = function(options) {
         options.cell = options.parent.options.cell;
     }
     return options;
-}
+};
 
 WidgetManager.prototype.get_msg_cell = function (msg_id) {
     var cell = null;
@@ -572,7 +584,7 @@ WidgetManager.prototype.prependSnapshots = function() {
 };
 
 /**
- * Remove the outputs that rendered widget view's.
+ * Remove the outputs that rendered widget views.
  *
  * Note: This function must be synchronous, in order to work with the
  * notebook's save machinery.

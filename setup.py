@@ -91,6 +91,8 @@ setup_args = dict(
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
     ],
     cmdclass        = {
         'build_py': build_py,
@@ -110,7 +112,7 @@ install_requires = setuptools_args['install_requires'] = [
     # only if notebook 4.x is installed in this
     # interpreter, to allow ipywidgets to be
     # installed on bare kernels.
-    'widgetsnbextension>=1.0.0',
+    'widgetsnbextension>=1.1.0',
 ]
 
 extras_require = setuptools_args['extras_require'] = {
